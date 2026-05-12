@@ -176,6 +176,11 @@ def get_managed_system() -> Optional[str]:
     managed_marker = get_hermes_home() / ".managed"
     if managed_marker.exists():
         return "NixOS"
+
+    # Fallback to NixOS detection (only if env var and .managed file are absent)
+    if is_nixos():
+        return "NixOS"
+
     return None
 
 
@@ -291,7 +296,7 @@ def get_container_exec_info() -> Optional[dict]:
 # =============================================================================
 
 # Re-export from hermes_constants — canonical definition lives there.
-from hermes_constants import get_hermes_home  # noqa: F811,E402
+from hermes_constants import get_hermes_home, is_nixos  # noqa: F811,E402
 from utils import atomic_replace
 
 def get_config_path() -> Path:

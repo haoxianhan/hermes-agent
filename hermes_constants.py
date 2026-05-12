@@ -4,11 +4,21 @@ Import-safe module with no dependencies — can be imported from anywhere
 without risk of circular imports.
 """
 
+import functools
 import os
 from pathlib import Path
 
 
 _profile_fallback_warned: bool = False
+
+
+@functools.lru_cache(maxsize=1)
+def _get_hermes_home_cached() -> Path:
+    """Cached Hermes home computation — env read + Path construction only."""
+    val = os.environ.get("HERMES_HOME", "").strip()
+    if val:
+        return Path(val)
+    return Path.home() / ".hermes"
 
 
 def get_hermes_home() -> Path:
@@ -65,9 +75,10 @@ def get_hermes_home() -> Path:
             except Exception:
                 pass
 
-    return Path.home() / ".hermes"
+    return _get_hermes_home_cached()
 
 
+@functools.lru_cache(maxsize=1)
 def get_default_hermes_root() -> Path:
     """Return the root Hermes directory for profile-level operations.
 
@@ -107,6 +118,7 @@ def get_default_hermes_root() -> Path:
     return env_path
 
 
+@functools.lru_cache(maxsize=1)
 def get_optional_skills_dir(default: Path | None = None) -> Path:
     """Return the optional-skills directory, honoring package-manager wrappers.
 
@@ -121,6 +133,7 @@ def get_optional_skills_dir(default: Path | None = None) -> Path:
     return get_hermes_home() / "optional-skills"
 
 
+@functools.lru_cache(maxsize=1)
 def get_hermes_dir(new_subpath: str, old_name: str) -> Path:
     """Resolve a Hermes subdirectory with backward compatibility.
 
@@ -271,9 +284,54 @@ def is_container() -> bool:
     return False
 
 
+_nixos_detected: bool | None = None
+
+
+def is_nixos() -> bool:
+    """Return True when running on a NixOS system.
+
+    Checks for NixOS markers: /nix/var/nix/profiles/default (the default
+    nix store path) or /run/current-system (the systemd-style path that
+    NixOS uses).  Result is cached for the process lifetime.
+    Import-safe — no heavy deps.
+    """
+    global _nixos_detected
+    if _nixos_detected is not None:
+        return _nixos_detected
+    if os.path.exists("/nix/var/nix/profiles/default"):
+        _nixos_detected = True
+        return True
+    if os.path.exists("/run/current-system"):
+        _nixos_detected = True
+        return True
+    _nixos_detected = False
+    return False
+
+
+def nixos_sandbox_note() -> str:
+    """Return a NixOS execute_code sandbox caveat for the LLM, or empty string on non-NixOS.
+
+    Describes the specific limitation: the execute_code sandbox on NixOS typically
+    lacks standard shell utilities (ls, cat, git, grep, sleep, head, systemctl,
+    ps, etc.) that a Linux dev environment normally provides.  This does NOT
+    mean the host filesystem, network, or subprocess are globally restricted —
+    only that the execute_code sandbox environment has a reduced toolset.
+    """
+    if not is_nixos():
+        return ""
+    return (
+        "NOTE: This environment is NixOS.  The execute_code sandbox may lack "
+        "standard shell utilities (ls, cat, git, grep, sleep, head, systemctl, "
+        "ps).  Use Python stdlib (os.listdir, pathlib, subprocess, urllib) for "
+        "file/IO operations.  For git operations, use the GitHub API via "
+        "urllib/zipfile instead of the git CLI."
+    )
+
+
 # ─── Well-Known Paths ─────────────────────────────────────────────────────────
 
 
+@functools.lru_cache(maxsize=1)
 def get_config_path() -> Path:
     """Return the path to ``config.yaml`` under HERMES_HOME.
 
@@ -283,12 +341,13 @@ def get_config_path() -> Path:
     return get_hermes_home() / "config.yaml"
 
 
+@functools.lru_cache(maxsize=1)
 def get_skills_dir() -> Path:
     """Return the path to the skills directory under HERMES_HOME."""
     return get_hermes_home() / "skills"
 
 
-
+@functools.lru_cache(maxsize=1)
 def get_env_path() -> Path:
     """Return the path to the ``.env`` file under HERMES_HOME."""
     return get_hermes_home() / ".env"

@@ -403,8 +403,14 @@ def _compute_tool_definitions(
     # disabled (#560-discord).
     if "execute_code" in available_tool_names:
         from tools.code_execution_tool import SANDBOX_ALLOWED_TOOLS, build_execute_code_schema, _get_execution_mode
+        from hermes_constants import nixos_sandbox_note
         sandbox_enabled = SANDBOX_ALLOWED_TOOLS & available_tool_names
         dynamic_schema = build_execute_code_schema(sandbox_enabled, mode=_get_execution_mode())
+        # Inject NixOS sandbox caveat into the schema description so the LLM
+        # knows about potential sandbox restrictions on that platform.
+        nixos_note = nixos_sandbox_note()
+        if nixos_note:
+            dynamic_schema["description"] += f"\n\n{nixos_note}"
         for i, td in enumerate(filtered_tools):
             if td.get("function", {}).get("name") == "execute_code":
                 filtered_tools[i] = {"type": "function", "function": dynamic_schema}
