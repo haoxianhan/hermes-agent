@@ -12,7 +12,7 @@ import threading
 from collections import OrderedDict
 from pathlib import Path
 
-from hermes_constants import get_hermes_home, get_skills_dir, is_wsl
+from hermes_constants import get_hermes_home, get_skills_dir, is_nixos, is_wsl, nixos_sandbox_note
 from typing import Optional
 
 from agent.skill_utils import (
@@ -789,6 +789,19 @@ def build_environment_hints() -> str:
         # know this or it will issue PowerShell syntax and fail.
         if sys.platform == "win32" and not is_wsl():
             hints.append(_WINDOWS_BASH_SHELL_HINT)
+
+        # WSL environment hint — WSL is always a local backend.
+        if is_wsl():
+            hints.append(WSL_ENVIRONMENT_HINT)
+
+        # NixOS sandbox note: only relevant for local backend where the
+        # host's NixOS constraints directly affect execute_code.  Remote
+        # backends (docker/ssh/modal/daytona) run tools in the backend
+        # environment — the host OS is irrelevant there.
+        if is_nixos():
+            note = nixos_sandbox_note()
+            if note:
+                hints.append(note)
     else:
         # --- Remote backend block (host info suppressed) ---
         probe = _probe_remote_backend(backend)
@@ -816,8 +829,6 @@ def build_environment_hints() -> str:
                 f"`uname -a && whoami && pwd`."
             )
 
-    if is_wsl():
-        hints.append(WSL_ENVIRONMENT_HINT)
     return "\n\n".join(hints)
 
 
